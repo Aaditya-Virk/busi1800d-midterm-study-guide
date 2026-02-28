@@ -1,6 +1,43 @@
+/**
+ * @file StudyApp.jsx
+ * @description Interactive study tool for Carleton University BUSI 1001 (Contemporary Business).
+ *
+ * Features:
+ *  - Chapter-by-chapter notes viewer with section navigation
+ *  - Flashcard mode (tap to flip term → definition)
+ *  - Per-chapter quick quiz (10 MCQ, instant feedback)
+ *  - Full 100-question randomized midterm exam with Carleton-style grading
+ *  - Global search across all terms and definitions
+ *
+ * Chapters covered: 1, 2, 3, 4, 5, 6, 16, 18
+ *
+ * @author Aaditya Virk
+ * @license MIT
+ */
+
 import { useState } from "react";
 
+// ─────────────────────────────────────────────────────────────────────────────
+// CONSTANTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Accent colours assigned to each chapter in order.
+ * Used for headers, pills, progress bars, and card borders.
+ */
 const COLORS = ["#e85d04","#2d6a4f","#7209b7","#0077b6","#c77dff","#f77f00","#e63946","#06a77d"];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COURSE DATA
+// Each chapter object contains:
+//   num      {number}   Chapter number (matches the textbook)
+//   title    {string}   Chapter title
+//   emoji    {string}   Decorative emoji used in the UI
+//   sections {Array}    Study notes broken into headed sections, each with
+//                       bullet-point strings
+//   terms    {Array}    [term, definition] pairs used for flashcards, quizzes,
+//                       and the midterm exam
+// ─────────────────────────────────────────────────────────────────────────────
 
 const chapters = [
   {
@@ -573,15 +610,24 @@ const chapters = [
   },
 ];
 
-// ── Google Fonts injection ───────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// GOOGLE FONTS INJECTION
+// Dynamically injects Playfair Display + DM Sans + DM Mono into <head>.
+// Also adds global CSS: scrollbar styles, keyframe animations, and shared
+// hover/transition helper classes that are applied via className.
+// Called once at the top of the App component render.
+// ─────────────────────────────────────────────────────────────────────────────
+
 const FontLoader = () => {
   if (typeof document !== "undefined" && !document.getElementById("premium-fonts")) {
+    // Inject Google Fonts link tag
     const link = document.createElement("link");
     link.id = "premium-fonts";
     link.rel = "stylesheet";
     link.href = "https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700;900&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap";
     document.head.appendChild(link);
 
+    // Inject shared global styles (animations + helper classes)
     const style = document.createElement("style");
     style.innerHTML = `
       * { box-sizing: border-box; }
@@ -590,58 +636,98 @@ const FontLoader = () => {
       ::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 2px; }
       ::-webkit-scrollbar-thumb:hover { background: #3a3a5a; }
       html { scroll-behavior: smooth; }
+
+      /* Entrance animation for view transitions */
       @keyframes fadeUp {
         from { opacity: 0; transform: translateY(12px); }
         to   { opacity: 1; transform: translateY(0); }
       }
+      /* Shimmer effect (unused currently — available for future loading states) */
       @keyframes shimmer {
         0%   { background-position: -200% center; }
         100% { background-position: 200% center; }
       }
+      /* Generic pulse for in-progress indicators */
       @keyframes pulse {
         0%, 100% { opacity: 1; }
         50%       { opacity: 0.5; }
       }
+
       .fade-up { animation: fadeUp 0.35s ease forwards; }
+
+      /* Chapter list row hover state */
       .chapter-row:hover { background: rgba(255,255,255,0.03) !important; }
       .chapter-row:hover .ch-arrow { color: #666 !important; transform: translateX(3px); }
       .ch-arrow { transition: transform 0.2s ease, color 0.2s ease; }
+
+      /* Tab bar hover */
       .tab-btn:hover { color: #aaa !important; }
+
+      /* Section pill hover */
       .pill-btn:hover { border-color: #3a3a5a !important; }
+
+      /* Lift-on-hover for cards */
       .card-hover:hover { transform: translateY(-1px); box-shadow: 0 8px 32px rgba(0,0,0,0.4); }
       .card-hover { transition: transform 0.2s ease, box-shadow 0.2s ease; }
+
+      /* Quiz/exam option button hover */
       .option-btn:hover:not(:disabled) { border-color: #3a3a5a !important; background: rgba(255,255,255,0.04) !important; }
       .option-btn { transition: all 0.15s ease; }
     `;
     document.head.appendChild(style);
   }
-  return null;
+  return null; // Renders nothing to the DOM
 };
 
-// ── Design tokens ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// DESIGN TOKENS
+// Single source of truth for colours, typography, and spacing values.
+// Keeps the inline-style-heavy component consistent across all views.
+// ─────────────────────────────────────────────────────────────────────────────
+
 const T = {
+  // Background layers (darkest → lightest)
   bg:       "#08080f",
   surface:  "#0e0e1a",
   surface2: "#141422",
   surface3: "#1a1a2a",
+
+  // Borders
   border:   "#1e1e2e",
   border2:  "#262636",
-  text:     "#e8e8f0",
-  textSub:  "#9090a8",
-  textMute: "#44445a",
-  cream:    "#f0e6d0",
+
+  // Text
+  text:     "#e8e8f0",   // primary
+  textSub:  "#9090a8",   // secondary / body copy
+  textMute: "#44445a",   // disabled / labels
+
+  // Accent colours
+  cream:    "#f0e6d0",   // headings
   gold:     "#c9a84c",
   goldDim:  "#c9a84c30",
-  crimson:  "#9B1D20",
+  crimson:  "#9B1D20",   // exam / danger
   crimsonDim:"#9B1D2020",
-  green:    "#22c55e",
-  red:      "#ef4444",
+  green:    "#22c55e",   // correct / pass
+  red:      "#ef4444",   // incorrect / fail
+
+  // Typography stacks
   fontDisplay: "'Playfair Display', Georgia, serif",
   fontBody:    "'DM Sans', system-ui, sans-serif",
   fontMono:    "'DM Mono', monospace",
 };
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// UTILITY FUNCTIONS
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Returns a new array with the elements of `arr` in a random order
+ * (Fisher-Yates in-place shuffle on a copy).
+ *
+ * @template T
+ * @param {T[]} arr - The array to shuffle.
+ * @returns {T[]} A new shuffled array (original is not mutated).
+ */
 function shuffle(arr) {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
@@ -651,21 +737,62 @@ function shuffle(arr) {
   return a;
 }
 
+/**
+ * Builds a set of multiple-choice quiz questions from a pool of terms.
+ * Each question presents one correct definition and three distractor
+ * definitions drawn randomly from the full cross-chapter term list.
+ *
+ * @param {Array<[string, string, number, string]>} pool
+ *   Array of [term, definition, chapterNum, chapterTitle] tuples to draw from.
+ * @param {Array<[string, string]>} allTermsFlat
+ *   The full [term, definition] list used to generate distractors.
+ * @param {number} count - Maximum number of questions to generate.
+ * @returns {Array<{term, correctDef, chapterNum, chapterTitle, options}>}
+ */
 function buildQuestions(pool, allTermsFlat, count) {
   const picked = shuffle(pool).slice(0, Math.min(count, pool.length));
   return picked.map(([term, correctDef, chapterNum, chapterTitle]) => {
+    // Pick 3 wrong definitions from terms that are NOT the current one
     const distractors = shuffle(
       allTermsFlat.filter(([t]) => t !== term)
     ).slice(0, 3).map(([, d]) => d);
-    return { term, correctDef, chapterNum, chapterTitle, options: shuffle([correctDef, ...distractors]) };
+
+    return {
+      term,
+      correctDef,
+      chapterNum,
+      chapterTitle,
+      // Shuffle correct + distractors so the correct answer isn't always first
+      options: shuffle([correctDef, ...distractors]),
+    };
   });
 }
 
+/**
+ * Constructs the full 100-question midterm exam, distributing questions
+ * proportionally across chapters based on how many terms each chapter has.
+ * Each chapter gets at least as many questions as it has terms (up to 8 min),
+ * and the total is normalised to exactly TARGET (100) questions.
+ *
+ * @param {typeof chapters} allChapters - The chapters array defined above.
+ * @returns {Array<{chapterNum, chapterTitle, emoji, color, questions}>}
+ *   One section object per chapter, each containing its question array.
+ */
 function buildExam(allChapters) {
-  const allTermsFlat = allChapters.flatMap(c => c.terms.map(([t, d]) => [t, d, c.num, c.title]));
+  // Flatten all terms with chapter metadata for cross-chapter distractor generation
+  const allTermsFlat = allChapters.flatMap(c =>
+    c.terms.map(([t, d]) => [t, d, c.num, c.title])
+  );
+
   const total = allTermsFlat.length;
   const TARGET = 100;
-  const counts = allChapters.map(c => Math.max(Math.round((c.terms.length / total) * TARGET), Math.min(8, c.terms.length)));
+
+  // Allocate proportional question counts, with a floor of min(8, chTerms)
+  const counts = allChapters.map(c =>
+    Math.max(Math.round((c.terms.length / total) * TARGET), Math.min(8, c.terms.length))
+  );
+
+  // Nudge counts up or down one-at-a-time until the total hits exactly TARGET
   let sum = counts.reduce((a, b) => a + b, 0);
   let i = 0;
   while (sum < TARGET) { counts[i % counts.length]++; sum++; i++; }
@@ -674,106 +801,262 @@ function buildExam(allChapters) {
     if (idx === -1) break;
     counts[idx]--; sum--;
   }
+
+  // Build and return the exam sections
   return allChapters.map((ch, ci) => ({
-    chapterNum: ch.num,
+    chapterNum:   ch.num,
     chapterTitle: ch.title,
-    emoji: ch.emoji,
-    color: COLORS[ci],
-    questions: buildQuestions(ch.terms.map(([t, d]) => [t, d, ch.num, ch.title]), allTermsFlat, counts[ci]),
+    emoji:        ch.emoji,
+    color:        COLORS[ci],
+    questions: buildQuestions(
+      ch.terms.map(([t, d]) => [t, d, ch.num, ch.title]),
+      allTermsFlat,
+      counts[ci]
+    ),
   }));
 }
 
-// ── Reusable UI primitives ────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// REUSABLE UI PRIMITIVES
+// ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Small uppercase label / section header text.
+ *
+ * @param {{ children: React.ReactNode, color?: string }} props
+ */
 const Label = ({ children, color }) => (
-  <div style={{ fontFamily: T.fontBody, fontSize: 9, fontWeight: 600, letterSpacing: "0.18em", color: color || T.textMute, textTransform: "uppercase", marginBottom: 4 }}>
+  <div style={{
+    fontFamily: T.fontBody,
+    fontSize: 9,
+    fontWeight: 600,
+    letterSpacing: "0.18em",
+    color: color || T.textMute,
+    textTransform: "uppercase",
+    marginBottom: 4,
+  }}>
     {children}
   </div>
 );
 
+/**
+ * A 1px horizontal rule that respects the app's border colour palette.
+ *
+ * @param {{ color?: string }} props - Optional accent colour for the divider.
+ */
 const Divider = ({ color }) => (
-  <div style={{ height: 1, background: color ? `${color}25` : T.border, margin: "0" }} />
+  <div style={{
+    height: 1,
+    background: color ? `${color}25` : T.border,
+    margin: "0",
+  }} />
 );
 
-// ── Main App ──────────────────────────────────────────────────────────────────
-export default function App() {
-  FontLoader();
+// ─────────────────────────────────────────────────────────────────────────────
+// MAIN APP COMPONENT
+// ─────────────────────────────────────────────────────────────────────────────
 
+export default function App() {
+  FontLoader(); // Inject fonts + global styles on first render
+
+  // ── Navigation state ──────────────────────────────────────────────────────
+  /** Index into the `chapters` array for the currently open chapter. */
   const [chIdx, setChIdx] = useState(0);
+
+  /** Index into the current chapter's `sections` array. */
   const [secIdx, setSecIdx] = useState(0);
+
+  /** Active tab within the content view: "notes" | "flashcards" | "quiz". */
   const [tab, setTab] = useState("notes");
+
+  // ── Flashcard state ───────────────────────────────────────────────────────
+  /**
+   * Tracks which flashcards are flipped.
+   * Key format: `"${chapterIndex}-${termIndex}"` → boolean.
+   */
   const [flipped, setFlipped] = useState({});
+
+  // ── Global search state ───────────────────────────────────────────────────
   const [search, setSearch] = useState("");
   const [showSearch, setShowSearch] = useState(false);
+
+  // ── Top-level view state ──────────────────────────────────────────────────
+  /** "chapters" | "content" | "exam" */
   const [view, setView] = useState("chapters");
 
+  // ── Quick quiz state (per-chapter, 10 questions) ──────────────────────────
+  /** Array of question objects for the active quick quiz. Null when not started. */
   const [quickQuiz, setQuickQuiz] = useState(null);
+
+  /** Index of the current question within `quickQuiz`. */
   const [qqIdx, setQqIdx] = useState(0);
+
+  /** The option string the user just selected, or null if unanswered. */
   const [qqSelected, setQqSelected] = useState(null);
+
+  /** Running log of answers: [{ correct, term, correctDef, chosen }]. */
   const [qqAnswers, setQqAnswers] = useState([]);
+
+  /** True once the user has answered all quick-quiz questions. */
   const [qqDone, setQqDone] = useState(false);
 
+  // ── Midterm exam state (100 questions, all chapters) ────────────────────────
+  /** Array of section objects built by buildExam(). Null until exam is launched. */
   const [examSections, setExamSections] = useState(null);
+
+  /**
+   * Stores the user's exam selections.
+   * Key format: `"${sectionIndex}-${questionIndex}"` → chosen option string.
+   */
   const [examAnswers, setExamAnswers] = useState({});
+
+  /** True after the user clicks "Submit Examination". */
   const [examSubmitted, setExamSubmitted] = useState(false);
 
-  const ch = chapters[chIdx];
-  const color = COLORS[chIdx];
+  // ── Derived values ────────────────────────────────────────────────────────
+  const ch = chapters[chIdx];               // Currently selected chapter
+  const color = COLORS[chIdx];              // Accent colour for current chapter
 
+  /** All terms across every chapter, as flat objects (for search). */
   const allTermsFlat = chapters.flatMap(c => c.terms);
   const allTerms = chapters.flatMap((c, ci) =>
     c.terms.map(([term, def]) => ({ term, def, num: c.num, color: COLORS[ci] }))
   );
+
+  /** Live search results (min 2 chars required to start filtering). */
   const results = search.length > 1
-    ? allTerms.filter(t => t.term.toLowerCase().includes(search.toLowerCase()) || t.def.toLowerCase().includes(search.toLowerCase()))
+    ? allTerms.filter(t =>
+        t.term.toLowerCase().includes(search.toLowerCase()) ||
+        t.def.toLowerCase().includes(search.toLowerCase())
+      )
     : [];
 
+  // ── Layout constants ──────────────────────────────────────────────────────
+  const headerH = 64;  // px — height of the sticky top bar
+  const tabBarH = 46;  // px — height of the Notes / Cards / Quiz tab strip
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // HANDLERS
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /** Toggle the flip state of a single flashcard. */
   const flip = key => setFlipped(f => ({ ...f, [key]: !f[key] }));
 
+  /**
+   * Navigate to a chapter's content view.
+   * Resets section index, active tab, and quiz state.
+   *
+   * @param {number} i - Index into the `chapters` array.
+   */
   const selectChapter = (i) => {
-    setChIdx(i); setSecIdx(0); setTab("notes"); setView("content");
-    setQuickQuiz(null); setQqDone(false); window.scrollTo(0, 0);
+    setChIdx(i);
+    setSecIdx(0);
+    setTab("notes");
+    setView("content");
+    setQuickQuiz(null);
+    setQqDone(false);
+    window.scrollTo(0, 0);
   };
 
+  /**
+   * Start a quick quiz for the current chapter.
+   * Picks up to 10 terms at random, builds MCQ options, and resets all
+   * quiz-related state.
+   */
   const startQuickQuiz = () => {
     const count = Math.min(ch.terms.length, 10);
     const qs = shuffle(ch.terms).slice(0, count).map(([term, correctDef]) => {
-      const distractors = shuffle(allTermsFlat.filter(([t]) => t !== term)).slice(0, 3).map(([, d]) => d);
+      const distractors = shuffle(allTermsFlat.filter(([t]) => t !== term))
+        .slice(0, 3)
+        .map(([, d]) => d);
       return { term, correctDef, options: shuffle([correctDef, ...distractors]) };
     });
-    setQuickQuiz(qs); setQqIdx(0); setQqSelected(null); setQqAnswers([]); setQqDone(false);
+    setQuickQuiz(qs);
+    setQqIdx(0);
+    setQqSelected(null);
+    setQqAnswers([]);
+    setQqDone(false);
     window.scrollTo(0, 0);
   };
 
+  /**
+   * Record the user's answer for the current quick-quiz question.
+   * No-ops if the question has already been answered.
+   *
+   * @param {string} opt - The definition string the user tapped.
+   */
   const handleQqAnswer = (opt) => {
-    if (qqSelected !== null) return;
+    if (qqSelected !== null) return; // Already answered
     setQqSelected(opt);
-    setQqAnswers(a => [...a, { correct: opt === quickQuiz[qqIdx].correctDef, term: quickQuiz[qqIdx].term, correctDef: quickQuiz[qqIdx].correctDef, chosen: opt }]);
+    setQqAnswers(a => [...a, {
+      correct: opt === quickQuiz[qqIdx].correctDef,
+      term:        quickQuiz[qqIdx].term,
+      correctDef:  quickQuiz[qqIdx].correctDef,
+      chosen:      opt,
+    }]);
   };
 
+  /**
+   * Advance to the next quick-quiz question, or mark the quiz as complete
+   * if there are no more questions.
+   */
   const nextQq = () => {
-    if (qqIdx + 1 >= quickQuiz.length) setQqDone(true);
-    else { setQqIdx(i => i + 1); setQqSelected(null); }
+    if (qqIdx + 1 >= quickQuiz.length) {
+      setQqDone(true);
+    } else {
+      setQqIdx(i => i + 1);
+      setQqSelected(null);
+    }
     window.scrollTo(0, 0);
   };
 
-  const resetQq = () => { setQuickQuiz(null); setQqDone(false); setQqSelected(null); setQqAnswers([]); };
-
-  const launchExam = () => {
-    setExamSections(buildExam(chapters)); setExamAnswers({});
-    setExamSubmitted(false); setView("exam"); window.scrollTo(0, 0);
+  /** Reset all quick-quiz state (returns to the pre-quiz launch screen). */
+  const resetQq = () => {
+    setQuickQuiz(null);
+    setQqDone(false);
+    setQqSelected(null);
+    setQqAnswers([]);
   };
 
+  /**
+   * Generate the exam and switch to the exam view.
+   * Resets all previous exam answers and submission state.
+   */
+  const launchExam = () => {
+    setExamSections(buildExam(chapters));
+    setExamAnswers({});
+    setExamSubmitted(false);
+    setView("exam");
+    window.scrollTo(0, 0);
+  };
+
+  /**
+   * Record a user's selection for a single exam question.
+   * No-ops once the exam has been submitted.
+   *
+   * @param {number} si  - Section index (chapter group).
+   * @param {number} qi  - Question index within that section.
+   * @param {string} opt - The definition string the user chose.
+   */
   const setExamAnswer = (si, qi, opt) => {
     if (examSubmitted) return;
     setExamAnswers(prev => ({ ...prev, [`${si}-${qi}`]: opt }));
   };
 
-  const totalExamQs = examSections ? examSections.reduce((a, s) => a + s.questions.length, 0) : 0;
+  // ── Exam progress helpers ─────────────────────────────────────────────────
+  const totalExamQs   = examSections ? examSections.reduce((a, s) => a + s.questions.length, 0) : 0;
   const answeredCount = Object.keys(examAnswers).length;
-  const canSubmit = answeredCount === totalExamQs;
+  const canSubmit     = answeredCount === totalExamQs;
+
+  /** Lock in all answers and display the results view. */
   const submitExam = () => { setExamSubmitted(true); window.scrollTo(0, 0); };
 
+  /**
+   * Compute per-section and overall results once the exam is submitted.
+   * Returns null if the exam hasn't been submitted yet.
+   *
+   * @type {Array<{...section, qs, correct, total, pct}> | null}
+   */
   const examResults = examSubmitted && examSections
     ? examSections.map((sec, si) => {
         const qs = sec.questions.map((q, qi) => {
@@ -786,18 +1069,25 @@ export default function App() {
     : null;
 
   const examTotalCorrect = examResults ? examResults.reduce((a, r) => a + r.correct, 0) : 0;
-  const examTotalPct = examResults ? Math.round((examTotalCorrect / totalExamQs) * 100) : 0;
+  const examTotalPct     = examResults ? Math.round((examTotalCorrect / totalExamQs) * 100) : 0;
 
-  // ── Header height helpers
-  const headerH = 64;
-  const tabBarH = 46;
+  // ─────────────────────────────────────────────────────────────────────────
+  // RENDER
+  // ─────────────────────────────────────────────────────────────────────────
 
   return (
-    <div style={{ minHeight: "100vh", background: T.bg, color: T.text, fontFamily: T.fontBody, display: "flex", flexDirection: "column" }}>
+    <div style={{
+      minHeight: "100vh",
+      background: T.bg,
+      color: T.text,
+      fontFamily: T.fontBody,
+      display: "flex",
+      flexDirection: "column",
+    }}>
 
-      {/* ════════════════════════════════════════════════════════════
-          HEADER
-      ════════════════════════════════════════════════════════════ */}
+      {/* ══════════════════════════════════════════════════════════════════
+          HEADER — Sticky top bar; content changes per view.
+          ══════════════════════════════════════════════════════════════════ */}
       <div style={{
         background: "rgba(8,8,15,0.95)",
         backdropFilter: "blur(20px)",
@@ -808,18 +1098,22 @@ export default function App() {
         position: "sticky", top: 0, zIndex: 50,
         transition: "border-color 0.4s",
       }}>
+
+        {/* Exam header: back button + progress counter */}
         {view === "exam" ? (
           <div style={{ display: "flex", alignItems: "center", gap: 12, width: "100%" }}>
             {!examSubmitted && (
-              <button onClick={() => { setView("chapters"); setExamSections(null); }}
-                style={{ background: "none", border: "none", cursor: "pointer", color: T.textSub, fontSize: 22, padding: "6px 8px 6px 0", lineHeight: 1, flexShrink: 0, fontFamily: T.fontBody }}>
+              <button
+                onClick={() => { setView("chapters"); setExamSections(null); }}
+                style={{ background: "none", border: "none", cursor: "pointer", color: T.textSub, fontSize: 22, padding: "6px 8px 6px 0", lineHeight: 1, flexShrink: 0, fontFamily: T.fontBody }}
+              >
                 ←
               </button>
             )}
             <div style={{ flex: 1, minWidth: 0 }}>
               <Label color={T.crimson}>Carleton University — BUSI 1001</Label>
               <div style={{ fontFamily: T.fontDisplay, fontSize: 16, fontWeight: 700, color: T.cream, lineHeight: 1.2 }}>
-                {examSubmitted ? "Exam Results" : "Final Examination"}
+                {examSubmitted ? "Exam Results" : "Midterm Examination"}
               </div>
             </div>
             {!examSubmitted && (
@@ -831,10 +1125,14 @@ export default function App() {
               </div>
             )}
           </div>
+
+        /* Content header: back button + chapter title + search toggle */
         ) : view === "content" ? (
           <div style={{ display: "flex", alignItems: "center", gap: 12, width: "100%" }}>
-            <button onClick={() => { setView("chapters"); setShowSearch(false); setSearch(""); }}
-              style={{ background: "none", border: "none", cursor: "pointer", color: T.textSub, fontSize: 22, padding: "6px 8px 6px 0", lineHeight: 1, flexShrink: 0, fontFamily: T.fontBody }}>
+            <button
+              onClick={() => { setView("chapters"); setShowSearch(false); setSearch(""); }}
+              style={{ background: "none", border: "none", cursor: "pointer", color: T.textSub, fontSize: 22, padding: "6px 8px 6px 0", lineHeight: 1, flexShrink: 0, fontFamily: T.fontBody }}
+            >
               ←
             </button>
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -843,11 +1141,15 @@ export default function App() {
                 {ch.emoji} {ch.title}
               </div>
             </div>
-            <button onClick={() => setShowSearch(s => !s)}
-              style={{ background: showSearch ? T.surface3 : "none", border: showSearch ? `1px solid ${T.border2}` : "none", borderRadius: 8, cursor: "pointer", color: showSearch ? T.text : T.textMute, fontSize: 15, padding: "6px 10px", flexShrink: 0, fontFamily: T.fontBody, transition: "all 0.2s" }}>
+            <button
+              onClick={() => setShowSearch(s => !s)}
+              style={{ background: showSearch ? T.surface3 : "none", border: showSearch ? `1px solid ${T.border2}` : "none", borderRadius: 8, cursor: "pointer", color: showSearch ? T.text : T.textMute, fontSize: 15, padding: "6px 10px", flexShrink: 0, fontFamily: T.fontBody, transition: "all 0.2s" }}
+            >
               ⌕
             </button>
           </div>
+
+        /* Chapter-list header: app title + global search toggle */
         ) : (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
             <div>
@@ -855,19 +1157,34 @@ export default function App() {
               <div style={{ fontFamily: T.fontDisplay, fontSize: 20, fontWeight: 700, color: T.cream, lineHeight: 1.1 }}>Contemporary Business</div>
               <div style={{ fontFamily: T.fontBody, fontSize: 11, color: T.textMute, marginTop: 2 }}>Ch. 1–6 · 16 · 18</div>
             </div>
-            <button onClick={() => setShowSearch(s => !s)}
-              style={{ background: showSearch ? T.surface3 : "none", border: showSearch ? `1px solid ${T.border2}` : "1px solid transparent", borderRadius: 10, cursor: "pointer", color: showSearch ? T.text : T.textMute, fontSize: 16, padding: "8px 12px", fontFamily: T.fontBody, transition: "all 0.2s" }}>
+            <button
+              onClick={() => setShowSearch(s => !s)}
+              style={{ background: showSearch ? T.surface3 : "none", border: showSearch ? `1px solid ${T.border2}` : "1px solid transparent", borderRadius: 10, cursor: "pointer", color: showSearch ? T.text : T.textMute, fontSize: 16, padding: "8px 12px", fontFamily: T.fontBody, transition: "all 0.2s" }}
+            >
               ⌕
             </button>
           </div>
         )}
       </div>
 
-      {/* Search dropdown */}
+      {/* ══════════════════════════════════════════════════════════════════
+          SEARCH DROPDOWN — Shown below the header when showSearch is true.
+          Filters across all chapter terms and definitions in real time.
+          ══════════════════════════════════════════════════════════════════ */}
       {showSearch && view !== "exam" && (
-        <div style={{ background: T.surface, borderBottom: `1px solid ${T.border}`, padding: "12px 20px 16px", position: "sticky", top: headerH, zIndex: 49 }}>
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search any term across all chapters…" autoFocus
-            style={{ width: "100%", background: T.surface3, border: `1px solid ${T.border2}`, borderRadius: 10, padding: "10px 14px", color: T.text, fontSize: 14, outline: "none", fontFamily: T.fontBody, letterSpacing: "0.01em" }} />
+        <div style={{
+          background: T.surface,
+          borderBottom: `1px solid ${T.border}`,
+          padding: "12px 20px 16px",
+          position: "sticky", top: headerH, zIndex: 49,
+        }}>
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search any term across all chapters…"
+            autoFocus
+            style={{ width: "100%", background: T.surface3, border: `1px solid ${T.border2}`, borderRadius: 10, padding: "10px 14px", color: T.text, fontSize: 14, outline: "none", fontFamily: T.fontBody, letterSpacing: "0.01em" }}
+          />
           {search.length > 1 && (
             <div style={{ marginTop: 8, background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12, maxHeight: 260, overflowY: "auto" }}>
               {results.length === 0
@@ -880,30 +1197,35 @@ export default function App() {
                     </div>
                     <div style={{ color: T.textSub, fontSize: 12, fontFamily: T.fontBody, lineHeight: 1.5 }}>{t.def}</div>
                   </div>
-                ))}
+                ))
+              }
             </div>
           )}
         </div>
       )}
 
-      {/* ════════════════════════════════════════════════════════════
-          CHAPTER LIST
-      ════════════════════════════════════════════════════════════ */}
+      {/* ══════════════════════════════════════════════════════════════════
+          VIEW: CHAPTER LIST
+          Home screen. Shows the exam launch card and a list of all
+          available chapters to study.
+          ══════════════════════════════════════════════════════════════════ */}
       {view === "chapters" && (
         <div style={{ flex: 1 }}>
 
-          {/* Exam launch card */}
+          {/* Exam launch card — prominent call-to-action */}
           <div style={{ padding: "20px 20px 0" }}>
             <button onClick={launchExam} className="card-hover"
               style={{
-                width: "100%", textAlign: "left", border: `1px solid ${T.crimson}50`, cursor: "pointer",
+                width: "100%", textAlign: "left",
+                border: `1px solid ${T.crimson}50`, cursor: "pointer",
                 background: `linear-gradient(135deg, ${T.crimson}18 0%, ${T.surface}80 100%)`,
-                borderRadius: 18, padding: "20px", display: "flex", alignItems: "center", gap: 16,
+                borderRadius: 18, padding: "20px",
+                display: "flex", alignItems: "center", gap: 16,
               }}>
               <div style={{ width: 52, height: 52, borderRadius: 14, background: T.crimson + "25", border: `1px solid ${T.crimson}40`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, flexShrink: 0 }}>📝</div>
               <div style={{ flex: 1 }}>
                 <Label color={T.crimson}>Carleton University — BUSI 1001</Label>
-                <div style={{ fontFamily: T.fontDisplay, fontSize: 16, fontWeight: 700, color: T.cream, lineHeight: 1.3, marginBottom: 3 }}>Final Examination</div>
+                <div style={{ fontFamily: T.fontDisplay, fontSize: 16, fontWeight: 700, color: T.cream, lineHeight: 1.3, marginBottom: 3 }}>Midterm Examination</div>
                 <div style={{ fontFamily: T.fontBody, fontSize: 12, color: T.textMute }}>100 questions · all chapters · exam conditions</div>
               </div>
               <div style={{ textAlign: "center", flexShrink: 0 }}>
@@ -917,17 +1239,20 @@ export default function App() {
             <Label>Study by Chapter</Label>
           </div>
 
+          {/* Chapter cards */}
           <div style={{ padding: "0 20px 32px", display: "flex", flexDirection: "column", gap: 10 }}>
             {chapters.map((c, i) => {
               const cc = COLORS[i];
               return (
                 <button key={i} onClick={() => selectChapter(i)} className="card-hover chapter-row"
                   style={{
-                    width: "100%", textAlign: "left", border: `1px solid ${T.border}`,
+                    width: "100%", textAlign: "left",
+                    border: `1px solid ${T.border}`,
                     background: T.surface, borderRadius: 16, padding: "16px 18px",
                     cursor: "pointer", display: "flex", alignItems: "center", gap: 14,
                     transition: "background 0.2s",
                   }}>
+                  {/* Chapter emoji badge */}
                   <div style={{ width: 46, height: 46, borderRadius: 12, background: `${cc}18`, border: `1px solid ${cc}30`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>
                     {c.emoji}
                   </div>
@@ -944,18 +1269,23 @@ export default function App() {
         </div>
       )}
 
-      {/* ════════════════════════════════════════════════════════════
-          CONTENT VIEW
-      ════════════════════════════════════════════════════════════ */}
+      {/* ══════════════════════════════════════════════════════════════════
+          VIEW: CONTENT (Notes / Flashcards / Quick Quiz)
+          ══════════════════════════════════════════════════════════════════ */}
       {view === "content" && (
         <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
 
-          {/* Tab bar */}
-          <div style={{ display: "flex", background: "rgba(8,8,15,0.95)", backdropFilter: "blur(20px)", borderBottom: `1px solid ${T.border}`, position: "sticky", top: headerH, zIndex: 40, height: tabBarH }}>
+          {/* Tab bar — switches between the three study modes */}
+          <div style={{
+            display: "flex",
+            background: "rgba(8,8,15,0.95)", backdropFilter: "blur(20px)",
+            borderBottom: `1px solid ${T.border}`,
+            position: "sticky", top: headerH, zIndex: 40, height: tabBarH,
+          }}>
             {[
-              { id: "notes", label: "Notes", icon: "📖" },
-              { id: "flashcards", label: "Cards", icon: "🃏" },
-              { id: "quiz", label: "Quiz", icon: "✏️" },
+              { id: "notes",      label: "Notes",  icon: "📖" },
+              { id: "flashcards", label: "Cards",  icon: "🃏" },
+              { id: "quiz",       label: "Quiz",   icon: "✏️" },
             ].map(t => (
               <button key={t.id} className="tab-btn"
                 onClick={() => { setTab(t.id); if (t.id !== "quiz") resetQq(); }}
@@ -963,8 +1293,10 @@ export default function App() {
                   flex: 1, height: "100%", border: "none", cursor: "pointer", background: "none",
                   borderBottom: `2px solid ${tab === t.id ? color : "transparent"}`,
                   color: tab === t.id ? color : T.textMute,
-                  fontFamily: T.fontBody, fontSize: 13, fontWeight: tab === t.id ? 600 : 400,
-                  letterSpacing: "0.02em", transition: "all 0.2s", display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                  fontFamily: T.fontBody, fontSize: 13,
+                  fontWeight: tab === t.id ? 600 : 400,
+                  letterSpacing: "0.02em", transition: "all 0.2s",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
                 }}>
                 <span style={{ fontSize: 13 }}>{t.icon}</span>
                 {t.label}
@@ -972,11 +1304,17 @@ export default function App() {
             ))}
           </div>
 
-          {/* ── NOTES ── */}
+          {/* ── TAB: NOTES ─────────────────────────────────────────────── */}
           {tab === "notes" && (
             <div style={{ flex: 1 }}>
-              {/* Section pills */}
-              <div style={{ display: "flex", gap: 8, padding: "14px 20px", overflowX: "auto", scrollbarWidth: "none", background: T.surface, borderBottom: `1px solid ${T.border}`, position: "sticky", top: headerH + tabBarH, zIndex: 30 }}>
+
+              {/* Horizontal scroll pill bar for section selection */}
+              <div style={{
+                display: "flex", gap: 8, padding: "14px 20px",
+                overflowX: "auto", scrollbarWidth: "none",
+                background: T.surface, borderBottom: `1px solid ${T.border}`,
+                position: "sticky", top: headerH + tabBarH, zIndex: 30,
+              }}>
                 {ch.sections.map((s, i) => (
                   <button key={i} className="pill-btn" onClick={() => setSecIdx(i)}
                     style={{
@@ -988,27 +1326,41 @@ export default function App() {
                       whiteSpace: "nowrap", fontWeight: i === secIdx ? 600 : 400,
                       transition: "all 0.15s",
                     }}>
-                    <span style={{ fontFamily: T.fontMono, fontSize: 10, opacity: 0.6, marginRight: 4 }}>{String(i + 1).padStart(2, "0")}</span>
+                    {/* Zero-padded section number prefix */}
+                    <span style={{ fontFamily: T.fontMono, fontSize: 10, opacity: 0.6, marginRight: 4 }}>
+                      {String(i + 1).padStart(2, "0")}
+                    </span>
                     {s.heading}
                   </button>
                 ))}
               </div>
 
-              {/* Content */}
+              {/* Section content */}
               <div style={{ padding: "24px 22px 48px" }} className="fade-up">
                 <h2 style={{ fontFamily: T.fontDisplay, fontSize: 18, fontWeight: 700, color: T.cream, margin: "0 0 20px", lineHeight: 1.3, paddingBottom: 14, borderBottom: `1px solid ${color}30` }}>
                   {ch.sections[secIdx].heading}
                 </h2>
+
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                   {ch.sections[secIdx].bullets.map((b, i) => {
+                    /*
+                     * Detect "category header" bullets: ALL_CAPS strings that end
+                     * with a colon and are short enough to be a label (< 60 chars).
+                     * These are rendered differently — no dot, no body colour.
+                     */
                     const isHeader = b.endsWith(":") && b.length < 60 && b === b.toUpperCase();
+
                     if (isHeader) return (
                       <div key={i} style={{ marginTop: 6, marginBottom: 2 }}>
-                        <div style={{ fontFamily: T.fontBody, fontSize: 10, fontWeight: 700, color: color, letterSpacing: "0.15em" }}>{b}</div>
+                        <div style={{ fontFamily: T.fontBody, fontSize: 10, fontWeight: 700, color: color, letterSpacing: "0.15em" }}>
+                          {b}
+                        </div>
                       </div>
                     );
+
                     return (
                       <div key={i} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+                        {/* Colour dot bullet */}
                         <div style={{ width: 5, height: 5, borderRadius: "50%", background: color, flexShrink: 0, marginTop: 8, opacity: 0.7 }} />
                         <span style={{ fontFamily: T.fontBody, fontSize: 14, color: T.textSub, lineHeight: 1.7 }}>{b}</span>
                       </div>
@@ -1016,17 +1368,21 @@ export default function App() {
                   })}
                 </div>
 
-                {/* Prev / Next */}
+                {/* Prev / Next section navigation */}
                 <div style={{ display: "flex", gap: 10, marginTop: 36 }}>
                   {secIdx > 0 && (
-                    <button onClick={() => { setSecIdx(s => s - 1); window.scrollTo(0, 0); }}
-                      style={{ flex: 1, padding: "13px", background: T.surface2, border: `1px solid ${T.border2}`, borderRadius: 12, color: T.textSub, cursor: "pointer", fontFamily: T.fontBody, fontSize: 13, fontWeight: 500 }}>
+                    <button
+                      onClick={() => { setSecIdx(s => s - 1); window.scrollTo(0, 0); }}
+                      style={{ flex: 1, padding: "13px", background: T.surface2, border: `1px solid ${T.border2}`, borderRadius: 12, color: T.textSub, cursor: "pointer", fontFamily: T.fontBody, fontSize: 13, fontWeight: 500 }}
+                    >
                       ← Prev
                     </button>
                   )}
                   {secIdx < ch.sections.length - 1 && (
-                    <button onClick={() => { setSecIdx(s => s + 1); window.scrollTo(0, 0); }}
-                      style={{ flex: 1, padding: "13px", background: color, border: "none", borderRadius: 12, color: "#fff", cursor: "pointer", fontFamily: T.fontBody, fontSize: 13, fontWeight: 600 }}>
+                    <button
+                      onClick={() => { setSecIdx(s => s + 1); window.scrollTo(0, 0); }}
+                      style={{ flex: 1, padding: "13px", background: color, border: "none", borderRadius: 12, color: "#fff", cursor: "pointer", fontFamily: T.fontBody, fontSize: 13, fontWeight: 600 }}
+                    >
                       Next →
                     </button>
                   )}
@@ -1035,12 +1391,13 @@ export default function App() {
             </div>
           )}
 
-          {/* ── FLASHCARDS ── */}
+          {/* ── TAB: FLASHCARDS ─────────────────────────────────────────── */}
           {tab === "flashcards" && (
             <div style={{ padding: "20px 20px 48px" }}>
               <div style={{ fontFamily: T.fontBody, fontSize: 12, color: T.textMute, marginBottom: 16 }}>
                 {ch.terms.length} terms · tap any card to reveal definition
               </div>
+
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 {ch.terms.map(([term, def], i) => {
                   const key = `${chIdx}-${i}`;
@@ -1054,12 +1411,14 @@ export default function App() {
                         cursor: "pointer", transition: "all 0.2s",
                         WebkitTapHighlightColor: "transparent",
                       }}>
+                      {/* Front face: term only */}
                       {!isFlipped ? (
                         <div>
                           <div style={{ fontFamily: T.fontBody, fontSize: 10, color: T.textMute, letterSpacing: "0.1em", marginBottom: 8 }}>TERM — TAP TO REVEAL</div>
                           <div style={{ fontFamily: T.fontDisplay, fontSize: 17, fontWeight: 600, color: color, lineHeight: 1.3 }}>{term}</div>
                         </div>
                       ) : (
+                        /* Back face: dim term label + full definition */
                         <div>
                           <div style={{ fontFamily: T.fontBody, fontSize: 11, color: color, fontWeight: 600, letterSpacing: "0.05em", marginBottom: 8, opacity: 0.8 }}>{term}</div>
                           <div style={{ fontFamily: T.fontBody, fontSize: 14, color: T.text, lineHeight: 1.65 }}>{def}</div>
@@ -1069,48 +1428,67 @@ export default function App() {
                   );
                 })}
               </div>
-              <button onClick={() => setFlipped({})}
-                style={{ marginTop: 20, width: "100%", padding: "13px", background: T.surface2, border: `1px solid ${T.border2}`, borderRadius: 12, color: T.textMute, cursor: "pointer", fontFamily: T.fontBody, fontSize: 13 }}>
+
+              {/* Reset all flipped cards */}
+              <button
+                onClick={() => setFlipped({})}
+                style={{ marginTop: 20, width: "100%", padding: "13px", background: T.surface2, border: `1px solid ${T.border2}`, borderRadius: 12, color: T.textMute, cursor: "pointer", fontFamily: T.fontBody, fontSize: 13 }}
+              >
                 Reset all cards
               </button>
             </div>
           )}
 
-          {/* ── QUICK QUIZ ── */}
+          {/* ── TAB: QUICK QUIZ ─────────────────────────────────────────── */}
           {tab === "quiz" && (
             <div style={{ padding: "20px 20px 48px" }}>
+
+              {/* State 1: Pre-launch screen */}
               {!quickQuiz ? (
                 <div className="fade-up">
                   <div style={{ marginBottom: 28 }}>
                     <div style={{ fontFamily: T.fontDisplay, fontSize: 22, fontWeight: 700, color: T.cream, marginBottom: 8 }}>Quick Quiz</div>
-                    <div style={{ fontFamily: T.fontBody, fontSize: 14, color: T.textSub, lineHeight: 1.6 }}>10 multiple-choice questions from this chapter with instant feedback after each answer.</div>
+                    <div style={{ fontFamily: T.fontBody, fontSize: 14, color: T.textSub, lineHeight: 1.6 }}>
+                      10 multiple-choice questions from this chapter with instant feedback after each answer.
+                    </div>
                   </div>
+                  {/* Chapter quiz launch */}
                   <button onClick={startQuickQuiz} className="card-hover"
                     style={{ width: "100%", padding: "20px", background: `${color}12`, border: `1px solid ${color}40`, borderRadius: 18, cursor: "pointer", textAlign: "left", marginBottom: 12, WebkitTapHighlightColor: "transparent" }}>
                     <Label color={color}>Chapter Quiz</Label>
                     <div style={{ fontFamily: T.fontDisplay, fontSize: 17, fontWeight: 700, color: T.cream, marginBottom: 4 }}>{ch.emoji} {ch.title}</div>
                     <div style={{ fontFamily: T.fontBody, fontSize: 12, color: T.textMute }}>{Math.min(ch.terms.length, 10)} questions · instant feedback</div>
                   </button>
+                  {/* Full-exam shortcut */}
                   <button onClick={launchExam} className="card-hover"
                     style={{ width: "100%", padding: "20px", background: T.surface, border: `1px solid ${T.crimson}35`, borderRadius: 18, cursor: "pointer", textAlign: "left", WebkitTapHighlightColor: "transparent" }}>
                     <Label color={T.crimson}>Full Exam Mode</Label>
-                    <div style={{ fontFamily: T.fontDisplay, fontSize: 17, fontWeight: 700, color: T.cream, marginBottom: 4 }}>📝 100-Question Final</div>
+                    <div style={{ fontFamily: T.fontDisplay, fontSize: 17, fontWeight: 700, color: T.cream, marginBottom: 4 }}>📝 100-Question Midterm</div>
                     <div style={{ fontFamily: T.fontBody, fontSize: 12, color: T.textMute }}>All chapters · Carleton exam style</div>
                   </button>
                 </div>
+
+              /* State 2: Results screen */
               ) : qqDone ? (
                 (() => {
                   const score = qqAnswers.filter(a => a.correct).length;
-                  const pct = Math.round((score / quickQuiz.length) * 100);
-                  const grade = pct >= 90 ? { label: "Excellent!", col: T.green } : pct >= 75 ? { label: "Good job!", col: "#22c55e" } : pct >= 60 ? { label: "Almost there", col: "#f59e0b" } : { label: "Keep studying", col: T.red };
+                  const pct   = Math.round((score / quickQuiz.length) * 100);
+                  const grade =
+                    pct >= 90 ? { label: "Excellent!",     col: T.green }  :
+                    pct >= 75 ? { label: "Good job!",       col: "#22c55e"} :
+                    pct >= 60 ? { label: "Almost there",    col: "#f59e0b"} :
+                                { label: "Keep studying",   col: T.red   };
                   return (
                     <div className="fade-up">
+                      {/* Score summary */}
                       <div style={{ background: `${grade.col}12`, border: `1px solid ${grade.col}35`, borderRadius: 20, padding: "28px 22px", textAlign: "center", marginBottom: 24 }}>
                         <Label color={grade.col}>Quiz Complete</Label>
                         <div style={{ fontFamily: T.fontDisplay, fontSize: 56, fontWeight: 900, color: T.cream, lineHeight: 1, marginBottom: 6 }}>{pct}%</div>
                         <div style={{ fontFamily: T.fontBody, fontSize: 14, color: T.textSub, marginBottom: 10 }}>{score} / {quickQuiz.length} correct</div>
                         <div style={{ fontFamily: T.fontBody, fontSize: 16, color: grade.col, fontWeight: 600 }}>{grade.label}</div>
                       </div>
+
+                      {/* Mistake review — only shown if at least one wrong answer */}
                       {qqAnswers.some(a => !a.correct) && (
                         <div style={{ marginBottom: 24 }}>
                           <Label>Review Mistakes</Label>
@@ -1125,53 +1503,74 @@ export default function App() {
                           ))}
                         </div>
                       )}
+
                       <div style={{ display: "flex", gap: 10 }}>
                         <button onClick={startQuickQuiz} style={{ flex: 1, padding: "13px", background: color, border: "none", borderRadius: 12, color: "#fff", cursor: "pointer", fontFamily: T.fontBody, fontSize: 13, fontWeight: 600 }}>Try Again</button>
-                        <button onClick={resetQq} style={{ flex: 1, padding: "13px", background: T.surface2, border: `1px solid ${T.border2}`, borderRadius: 12, color: T.textMute, cursor: "pointer", fontFamily: T.fontBody, fontSize: 13 }}>Back</button>
+                        <button onClick={resetQq}        style={{ flex: 1, padding: "13px", background: T.surface2, border: `1px solid ${T.border2}`, borderRadius: 12, color: T.textMute, cursor: "pointer", fontFamily: T.fontBody, fontSize: 13 }}>Back</button>
                       </div>
                     </div>
                   );
                 })()
+
+              /* State 3: Active question */
               ) : (
                 (() => {
                   const q = quickQuiz[qqIdx];
                   return (
                     <div className="fade-up">
-                      {/* Progress */}
+                      {/* Progress indicator */}
                       <div style={{ marginBottom: 24 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
                           <span style={{ fontFamily: T.fontMono, fontSize: 11, color: T.textMute }}>Question {qqIdx + 1} of {quickQuiz.length}</span>
                           <span style={{ fontFamily: T.fontMono, fontSize: 11, color: T.textMute }}>{qqAnswers.filter(a => a.correct).length} correct</span>
                         </div>
+                        {/* Continuous progress bar */}
                         <div style={{ height: 3, background: T.surface3, borderRadius: 2, overflow: "hidden" }}>
                           <div style={{ height: "100%", background: color, width: `${(qqIdx / quickQuiz.length) * 100}%`, transition: "width 0.3s ease", borderRadius: 2 }} />
                         </div>
+                        {/* Per-question colour dots (green = correct, red = wrong) */}
                         <div style={{ display: "flex", gap: 3, marginTop: 6 }}>
-                          {qqAnswers.map((a, i) => <div key={i} style={{ flex: 1, height: 3, borderRadius: 2, background: a.correct ? T.green : T.red }} />)}
-                          {Array(quickQuiz.length - qqAnswers.length).fill(0).map((_, i) => <div key={i} style={{ flex: 1, height: 3, borderRadius: 2, background: T.surface3 }} />)}
+                          {qqAnswers.map((a, i) => (
+                            <div key={i} style={{ flex: 1, height: 3, borderRadius: 2, background: a.correct ? T.green : T.red }} />
+                          ))}
+                          {Array(quickQuiz.length - qqAnswers.length).fill(0).map((_, i) => (
+                            <div key={i} style={{ flex: 1, height: 3, borderRadius: 2, background: T.surface3 }} />
+                          ))}
                         </div>
                       </div>
-                      {/* Question */}
+
+                      {/* Question stem */}
                       <div style={{ background: T.surface, border: `1px solid ${color}30`, borderRadius: 18, padding: "22px 20px", marginBottom: 16 }}>
                         <Label color={color}>Define the term</Label>
                         <div style={{ fontFamily: T.fontDisplay, fontSize: 22, fontWeight: 700, color: T.cream, lineHeight: 1.3 }}>{q.term}</div>
                       </div>
-                      {/* Options */}
+
+                      {/* Answer options */}
                       <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
                         {q.options.map((opt, i) => {
-                          const isCorrect = opt === q.correctDef;
+                          const isCorrect  = opt === q.correctDef;
                           const isSelected = opt === qqSelected;
-                          const revealed = qqSelected !== null;
+                          const revealed   = qqSelected !== null;
+
+                          // Determine styling based on reveal state
                           let bg = T.surface, border = `1px solid ${T.border}`, textColor = T.textSub;
                           if (revealed) {
-                            if (isCorrect) { bg = `${T.green}12`; border = `1px solid ${T.green}50`; textColor = T.green; }
-                            else if (isSelected) { bg = `${T.red}12`; border = `1px solid ${T.red}50`; textColor = T.red; }
-                            else { textColor = T.textMute; }
+                            if (isCorrect)       { bg = `${T.green}12`; border = `1px solid ${T.green}50`; textColor = T.green; }
+                            else if (isSelected) { bg = `${T.red}12`;   border = `1px solid ${T.red}50`;   textColor = T.red;   }
+                            else                 { textColor = T.textMute; }
                           }
+
                           return (
                             <button key={i} onClick={() => handleQqAnswer(opt)} disabled={revealed} className="option-btn"
                               style={{ width: "100%", textAlign: "left", background: bg, border, borderRadius: 14, padding: "14px 16px", cursor: revealed ? "default" : "pointer", display: "flex", gap: 12, alignItems: "flex-start", WebkitTapHighlightColor: "transparent" }}>
-                              <span style={{ width: 26, height: 26, borderRadius: 8, flexShrink: 0, background: revealed && isCorrect ? `${T.green}25` : revealed && isSelected ? `${T.red}25` : T.surface3, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: T.fontMono, fontSize: 11, fontWeight: 500, color: revealed && isCorrect ? T.green : revealed && isSelected ? T.red : T.textMute }}>
+                              {/* Option letter badge — changes to ✓ or ✗ after answer */}
+                              <span style={{
+                                width: 26, height: 26, borderRadius: 8, flexShrink: 0,
+                                background: revealed && isCorrect ? `${T.green}25` : revealed && isSelected ? `${T.red}25` : T.surface3,
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                                fontFamily: T.fontMono, fontSize: 11, fontWeight: 500,
+                                color: revealed && isCorrect ? T.green : revealed && isSelected ? T.red : T.textMute,
+                              }}>
                                 {revealed && isCorrect ? "✓" : revealed && isSelected && !isCorrect ? "✗" : String.fromCharCode(65 + i)}
                               </span>
                               <span style={{ fontFamily: T.fontBody, fontSize: 14, color: textColor, lineHeight: 1.55, flex: 1 }}>{opt}</span>
@@ -1179,8 +1578,11 @@ export default function App() {
                           );
                         })}
                       </div>
+
+                      {/* Next button — only visible after an answer has been selected */}
                       {qqSelected !== null && (
-                        <button onClick={nextQq} style={{ width: "100%", padding: "14px", background: color, border: "none", borderRadius: 14, color: "#fff", cursor: "pointer", fontFamily: T.fontBody, fontSize: 14, fontWeight: 600 }}>
+                        <button onClick={nextQq}
+                          style={{ width: "100%", padding: "14px", background: color, border: "none", borderRadius: 14, color: "#fff", cursor: "pointer", fontFamily: T.fontBody, fontSize: 14, fontWeight: 600 }}>
                           {qqIdx + 1 >= quickQuiz.length ? "See Results →" : "Next Question →"}
                         </button>
                       )}
@@ -1193,43 +1595,47 @@ export default function App() {
         </div>
       )}
 
-      {/* ════════════════════════════════════════════════════════════
-          100-QUESTION EXAM
-      ════════════════════════════════════════════════════════════ */}
+      {/* ══════════════════════════════════════════════════════════════════
+          VIEW: MIDTERM EXAM (100 questions, all chapters)
+          ══════════════════════════════════════════════════════════════════ */}
       {view === "exam" && examSections && (
         <div style={{ flex: 1 }}>
 
-          {/* ── RESULTS ── */}
+          {/* ── RESULTS SCREEN ───────────────────────────────────────────── */}
           {examSubmitted ? (
             <div style={{ padding: "20px 20px 60px" }} className="fade-up">
               {(() => {
-                const grade = examTotalPct >= 90 ? { label: "A+", desc: "Outstanding", col: T.green }
-                  : examTotalPct >= 85 ? { label: "A",  desc: "Excellent",   col: T.green }
-                  : examTotalPct >= 80 ? { label: "A−", desc: "Very Good",   col: "#4ade80" }
-                  : examTotalPct >= 77 ? { label: "B+", desc: "Good",        col: "#60a5fa" }
-                  : examTotalPct >= 73 ? { label: "B",  desc: "Good",        col: "#60a5fa" }
-                  : examTotalPct >= 70 ? { label: "B−", desc: "Satisfactory",col: "#818cf8" }
-                  : examTotalPct >= 67 ? { label: "C+", desc: "Adequate",    col: "#f59e0b" }
-                  : examTotalPct >= 63 ? { label: "C",  desc: "Adequate",    col: "#f59e0b" }
-                  : examTotalPct >= 60 ? { label: "C−", desc: "Marginal",    col: "#fb923c" }
-                  : examTotalPct >= 50 ? { label: "D",  desc: "Marginal",    col: T.red }
-                  : { label: "F", desc: "Failing", col: T.red };
+                // Map percentage to Carleton letter grade
+                const grade =
+                  examTotalPct >= 90 ? { label: "A+", desc: "Outstanding",  col: T.green   } :
+                  examTotalPct >= 85 ? { label: "A",  desc: "Excellent",    col: T.green   } :
+                  examTotalPct >= 80 ? { label: "A−", desc: "Very Good",    col: "#4ade80" } :
+                  examTotalPct >= 77 ? { label: "B+", desc: "Good",         col: "#60a5fa" } :
+                  examTotalPct >= 73 ? { label: "B",  desc: "Good",         col: "#60a5fa" } :
+                  examTotalPct >= 70 ? { label: "B−", desc: "Satisfactory", col: "#818cf8" } :
+                  examTotalPct >= 67 ? { label: "C+", desc: "Adequate",     col: "#f59e0b" } :
+                  examTotalPct >= 63 ? { label: "C",  desc: "Adequate",     col: "#f59e0b" } :
+                  examTotalPct >= 60 ? { label: "C−", desc: "Marginal",     col: "#fb923c" } :
+                  examTotalPct >= 50 ? { label: "D",  desc: "Marginal",     col: T.red     } :
+                                       { label: "F",  desc: "Failing",      col: T.red     };
+
                 return (
                   <>
-                    {/* Score card */}
+                    {/* Overall score card with per-chapter progress bars */}
                     <div style={{ background: `${grade.col}10`, border: `1px solid ${grade.col}35`, borderRadius: 22, padding: "28px 22px", marginBottom: 24 }}>
-                      <Label color={grade.col}>Carleton University — BUSI 1001 — Final Exam</Label>
+                      <Label color={grade.col}>Carleton University — BUSI 1001 — Midterm Exam</Label>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
                         <div>
                           <div style={{ fontFamily: T.fontDisplay, fontSize: 60, fontWeight: 900, color: T.cream, lineHeight: 1 }}>{examTotalPct}%</div>
                           <div style={{ fontFamily: T.fontBody, fontSize: 14, color: T.textSub, marginTop: 6 }}>{examTotalCorrect} / {totalExamQs} correct</div>
                         </div>
+                        {/* Letter grade badge */}
                         <div style={{ textAlign: "center", background: `${grade.col}18`, border: `1px solid ${grade.col}40`, borderRadius: 18, padding: "14px 22px" }}>
                           <div style={{ fontFamily: T.fontDisplay, fontSize: 40, fontWeight: 900, color: grade.col, lineHeight: 1 }}>{grade.label}</div>
                           <div style={{ fontFamily: T.fontBody, fontSize: 11, color: grade.col, marginTop: 4, opacity: 0.8 }}>{grade.desc}</div>
                         </div>
                       </div>
-                      {/* Chapter bars */}
+                      {/* Per-chapter score bars */}
                       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                         {examResults.map((r, i) => (
                           <div key={i}>
@@ -1248,6 +1654,8 @@ export default function App() {
                     {/* Per-chapter mistake review */}
                     {examResults.map((r, si) => {
                       const wrong = r.qs.filter(q => !q.correct);
+
+                      // Perfect score — show a success banner instead of mistake list
                       if (wrong.length === 0) return (
                         <div key={si} style={{ background: `${T.green}0c`, border: `1px solid ${T.green}25`, borderRadius: 14, padding: "14px 18px", marginBottom: 10, display: "flex", alignItems: "center", gap: 12 }}>
                           <span>✅</span>
@@ -1257,6 +1665,7 @@ export default function App() {
                           </div>
                         </div>
                       );
+
                       return (
                         <div key={si} style={{ marginBottom: 24 }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, paddingBottom: 10, borderBottom: `1px solid ${r.color}20` }}>
@@ -1280,7 +1689,7 @@ export default function App() {
                     })}
 
                     <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
-                      <button onClick={launchExam} style={{ flex: 1, padding: "14px", background: T.crimson, border: "none", borderRadius: 12, color: "#fff", cursor: "pointer", fontFamily: T.fontBody, fontSize: 13, fontWeight: 600 }}>Retake Exam</button>
+                      <button onClick={launchExam}                                          style={{ flex: 1, padding: "14px", background: T.crimson,  border: "none",                         borderRadius: 12, color: "#fff",      cursor: "pointer", fontFamily: T.fontBody, fontSize: 13, fontWeight: 600 }}>Retake Exam</button>
                       <button onClick={() => { setView("chapters"); setExamSections(null); }} style={{ flex: 1, padding: "14px", background: T.surface2, border: `1px solid ${T.border2}`, borderRadius: 12, color: T.textMute, cursor: "pointer", fontFamily: T.fontBody, fontSize: 13 }}>Back to Study</button>
                     </div>
                   </>
@@ -1289,9 +1698,10 @@ export default function App() {
             </div>
 
           ) : (
-            /* ── EXAM IN PROGRESS ── */
+            /* ── EXAM IN PROGRESS ──────────────────────────────────────────── */
             <div>
-              {/* Sticky progress bar */}
+
+              {/* Sticky progress bar + chapter jump pills */}
               <div style={{ position: "sticky", top: headerH, zIndex: 40, background: "rgba(8,8,15,0.95)", backdropFilter: "blur(20px)", borderBottom: `1px solid ${T.border}`, padding: "12px 20px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
                   <span style={{ fontFamily: T.fontBody, fontSize: 12, color: T.textMute }}>{answeredCount} of {totalExamQs} answered</span>
@@ -1299,14 +1709,15 @@ export default function App() {
                     {answeredCount === totalExamQs ? "✓ Ready to submit" : `${totalExamQs - answeredCount} remaining`}
                   </span>
                 </div>
+                {/* Overall progress bar: crimson while in progress, green when complete */}
                 <div style={{ height: 3, background: T.surface3, borderRadius: 2, overflow: "hidden", marginBottom: 10 }}>
                   <div style={{ height: "100%", background: answeredCount === totalExamQs ? T.green : T.crimson, width: `${(answeredCount / totalExamQs) * 100}%`, borderRadius: 2, transition: "width 0.2s ease" }} />
                 </div>
-                {/* Chapter jump pills */}
+                {/* Chapter jump pills — anchor-linked, turn coloured when section is complete */}
                 <div style={{ display: "flex", gap: 6, overflowX: "auto", scrollbarWidth: "none" }}>
                   {examSections.map((sec, si) => {
                     const secAnswered = sec.questions.filter((_, qi) => examAnswers[`${si}-${qi}`] !== undefined).length;
-                    const complete = secAnswered === sec.questions.length;
+                    const complete    = secAnswered === sec.questions.length;
                     return (
                       <a key={si} href={`#exam-sec-${si}`}
                         style={{ flexShrink: 0, padding: "4px 10px", borderRadius: 20, border: `1px solid ${complete ? sec.color + "60" : T.border2}`, background: complete ? `${sec.color}15` : "transparent", color: complete ? sec.color : T.textMute, fontFamily: T.fontBody, fontSize: 11, textDecoration: "none", whiteSpace: "nowrap", fontWeight: complete ? 600 : 400 }}>
@@ -1317,11 +1728,11 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Exam cover */}
+              {/* Exam cover / instructions block */}
               <div style={{ background: T.surface, borderBottom: `1px solid ${T.crimson}25`, padding: "24px 22px", margin: "0 0 4px" }}>
                 <Label color={T.crimson}>Carleton University</Label>
                 <div style={{ fontFamily: T.fontDisplay, fontSize: 20, fontWeight: 700, color: T.cream, marginBottom: 4 }}>BUSI 1001: Contemporary Business</div>
-                <div style={{ fontFamily: T.fontBody, fontSize: 13, color: T.textSub, marginBottom: 18 }}>Final Examination — {totalExamQs} Questions — All Chapters</div>
+                <div style={{ fontFamily: T.fontBody, fontSize: 13, color: T.textSub, marginBottom: 18 }}>Midterm Examination — {totalExamQs} Questions — All Chapters</div>
                 <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
                   {[["Questions", totalExamQs], ["Time Allowed", "3 hrs"], ["Weight", "40%"], ["Format", "MCQ"]].map(([k, v]) => (
                     <div key={k}>
@@ -1332,12 +1743,15 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Questions by chapter */}
+              {/* Question groups, one per chapter section */}
               {examSections.map((sec, si) => {
+                // Calculate the absolute question number for this section's first question
                 let qNum = 1;
                 for (let i = 0; i < si; i++) qNum += examSections[i].questions.length;
+
                 return (
                   <div key={si} id={`exam-sec-${si}`} style={{ marginBottom: 4 }}>
+
                     {/* Section header */}
                     <div style={{ background: `${sec.color}10`, borderTop: `2px solid ${sec.color}35`, borderBottom: `1px solid ${sec.color}20`, padding: "16px 22px", display: "flex", alignItems: "center", gap: 12 }}>
                       <span style={{ fontSize: 22 }}>{sec.emoji}</span>
@@ -1346,6 +1760,7 @@ export default function App() {
                         <div style={{ fontFamily: T.fontDisplay, fontSize: 15, fontWeight: 700, color: T.cream }}>{sec.chapterTitle}</div>
                         <div style={{ fontFamily: T.fontBody, fontSize: 11, color: T.textMute }}>Questions {qNum}–{qNum + sec.questions.length - 1} · {sec.questions.length} questions</div>
                       </div>
+                      {/* Section answered count */}
                       {(() => {
                         const done = sec.questions.filter((_, qi) => examAnswers[`${si}-${qi}`] !== undefined).length;
                         return (
@@ -1356,13 +1771,13 @@ export default function App() {
                       })()}
                     </div>
 
-                    {/* Questions */}
+                    {/* Individual questions */}
                     {sec.questions.map((q, qi) => {
                       const absNum = qNum + qi;
                       const chosen = examAnswers[`${si}-${qi}`];
                       return (
                         <div key={qi} style={{ padding: "20px 22px", borderBottom: `1px solid ${T.border}`, background: qi % 2 === 0 ? T.bg : T.surface + "60" }}>
-                          {/* Stem */}
+                          {/* Question stem */}
                           <div style={{ display: "flex", gap: 10, alignItems: "flex-start", marginBottom: 14 }}>
                             <span style={{ fontFamily: T.fontMono, fontSize: 12, color: T.textMute, flexShrink: 0, marginTop: 2, minWidth: 30 }}>{absNum}.</span>
                             <div style={{ fontFamily: T.fontBody, fontSize: 14, color: T.textSub, lineHeight: 1.65 }}>
@@ -1370,20 +1785,23 @@ export default function App() {
                               <span style={{ fontFamily: T.fontDisplay, color: T.cream, fontWeight: 600, fontStyle: "italic" }}>{q.term}</span>?
                             </div>
                           </div>
-                          {/* Options */}
+
+                          {/* Answer options */}
                           <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingLeft: 40 }}>
                             {q.options.map((opt, oi) => {
-                              const letter = String.fromCharCode(65 + oi);
-                              const isChosen = chosen === opt;
+                              const letter    = String.fromCharCode(65 + oi); // A, B, C, D
+                              const isChosen  = chosen === opt;
                               return (
                                 <button key={oi} onClick={() => setExamAnswer(si, qi, opt)} className="option-btn"
                                   style={{
-                                    textAlign: "left", border: `1px solid ${isChosen ? sec.color + "70" : T.border}`,
+                                    textAlign: "left",
+                                    border: `1px solid ${isChosen ? sec.color + "70" : T.border}`,
                                     background: isChosen ? `${sec.color}15` : T.surface,
                                     borderRadius: 10, padding: "11px 14px",
                                     cursor: "pointer", display: "flex", gap: 10, alignItems: "center",
                                     WebkitTapHighlightColor: "transparent",
                                   }}>
+                                  {/* Radio-style circle badge */}
                                   <span style={{
                                     width: 24, height: 24, borderRadius: "50%", flexShrink: 0,
                                     border: `1.5px solid ${isChosen ? sec.color : T.border2}`,
@@ -1407,19 +1825,23 @@ export default function App() {
                 );
               })}
 
-              {/* Submit */}
+              {/* Submit section */}
               <div style={{ padding: "28px 22px 56px", background: T.surface, borderTop: `1px solid ${T.border}` }}>
+                {/* Warning banner if questions are still unanswered */}
                 {!canSubmit && (
                   <div style={{ background: "#f59e0b10", border: "1px solid #f59e0b30", borderRadius: 12, padding: "12px 16px", marginBottom: 16, fontFamily: T.fontBody, fontSize: 13, color: "#f59e0b", lineHeight: 1.5 }}>
                     ⚠️ {totalExamQs - answeredCount} question{totalExamQs - answeredCount !== 1 ? "s" : ""} unanswered — will be marked incorrect.
                   </div>
                 )}
-                <button onClick={submitExam}
+                {/* Submit button — styled grey until all questions answered */}
+                <button
+                  onClick={submitExam}
                   style={{
                     width: "100%", padding: "16px",
                     background: canSubmit ? T.crimson : T.surface3,
                     border: canSubmit ? "none" : `1px solid ${T.border2}`,
-                    borderRadius: 14, color: canSubmit ? "#fff" : T.textMute,
+                    borderRadius: 14,
+                    color: canSubmit ? "#fff" : T.textMute,
                     cursor: canSubmit ? "pointer" : "default",
                     fontFamily: T.fontBody, fontSize: 15, fontWeight: 600, letterSpacing: "0.02em",
                     transition: "all 0.2s",
